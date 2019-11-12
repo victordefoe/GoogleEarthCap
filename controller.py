@@ -177,7 +177,6 @@ def main():
         img = crab_location('loc.jpg', mouse_pos=end_crab)
         ocr(img)
 
-
         move_scene()
 
     end = time.time()
