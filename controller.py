@@ -33,71 +33,48 @@ import win32gui
 import torch
 from PIL import Image
 import numpy as np
-from pynput.mouse import Button, Controller
+from pynput.mouse import Button
+from pynput.keyboard import Key
+import pynput
 import time
 import random
-from pynput import mouse as ms
 import matplotlib.pyplot as plt
+import re
+import pandas as pd
 
-mouse = Controller()
+mouse = pynput.mouse.Controller()
+keyboard = pynput.keyboard.Controller()
 
-# set pointer positon
-# mouse.position = (277, 645)
-# print('now we have moved it to {0}'.format(mouse.position))
-#
-# #鼠标移动（x,y）个距离
-# mouse.move(5, -5)
-# print(mouse.position)
-#
-# mouse.press(Button.left)
-# mouse.release(Button.left)
-#
-# #Double click
-# mouse.click(Button.left, 1)
-#
-# #scroll two  steps down
-# mouse.scroll(0, 500)
-
-
-#
-# def on_move(x, y ):
-#     print('Pointer moved to ',x,y)
-#
-# def on_click(x, y , button, pressed):
-#     print('{0} at {1}'.format('Pressed' if pressed else 'Released', (x, y)))
-#     if not pressed:
-#         return False
-#
-# def on_scroll(x, y ,dx, dy):
-#     print('scrolled {0} at {1}'.format(
-#         'down' if dy < 0 else 'up',
-#         (x, y)))
-#
-# while True:
-#     with ms.Listener(on_move = on_move,on_click = on_click,on_scroll = on_scroll) as listener:
-#         listener.join()
-
-# ---------------
 
 pwd = os.getcwd()
 
 
 def move_scene(motion='left'):
-    act = {'left': (-63, 190)}
-    # print(act[motion][0])
+    init_pos = (-1420, 500)
+    if mouse.position[0] >= 0:
+        mouse.position = init_pos
+        mouse.click(Button.left, 1)
+    else:
+        mouse.click(Button.left, 1)
+    act = {
+        'left': Key.left,
+        'right': Key.right,
+        'up': Key.up,
+        'down': Key.down}
 
-    mouse.position = act[motion]
-
-    # mouse.click(Button.left, 1)
-    mouse.press(Button.left)
-    time.sleep(round(random.uniform(0.5, 1.0), 10))
-    mouse.release(Button.left)
+    for i in range(1):
+        keyboard.press(act[motion])
+        time.sleep(0.05)
+        keyboard.release(act[motion])
 
 
-def crab_location(filename='loc.jpg'):
+def crab_location(filename, mouse_pos ,high_stage=False):
 
-    low_stage = (-681, 1057)
-    high_stage = (-721, 1057)
+    mouse.position = mouse_pos
+    # time.sleep(round(random.uniform(0.5, 1.0), 10))
+    # print(init_crab)
+
+    start_pos = (-721, 1057) if high_stage else (-681, 1057)
 
     mfcDC = win32ui.CreateDCFromHandle(
         win32gui.GetWindowDC(
@@ -109,7 +86,7 @@ def crab_location(filename='loc.jpg'):
     saveBitMap.CreateCompatibleBitmap(mfcDC, cap_w, cap_h)
     saveDC.SelectObject(saveBitMap)
     saveDC.BitBlt((0, 0), (cap_w, cap_h), mfcDC,
-                  high_stage, win32con.SRCCOPY)
+                  start_pos, win32con.SRCCOPY)
     saveBitMap.SaveBitmapFile(saveDC, filename)
 
     bmparray = np.asarray(saveBitMap.GetBitmapBits(), dtype=np.uint8)
@@ -157,6 +134,7 @@ def window_capture(filename, windowname='Google Earth Pro'):
     init_crab = (-w + 500, 500)
 
     cap_w, cap_h = 500, 500
+    end_crab = (-w + 500 + cap_w, 500 + cap_h)
     # print w,h　　　#图片大小
     # 为bitmap开辟空间
     saveBitMap.CreateCompatibleBitmap(mfcDC, cap_w, cap_h)
@@ -165,146 +143,47 @@ def window_capture(filename, windowname='Google Earth Pro'):
     # 截取从左上角（0，0）长宽为（w，h）的图片
     saveDC.BitBlt((0, 0), (cap_w, cap_h), mfcDC, init_crab, win32con.SRCCOPY)
     saveBitMap.SaveBitmapFile(saveDC, filename)
-    return init_crab
-
-
-beg = time.time()
-
-# 截图
-init_crab = window_capture("haha.jpg")
-mouse.position = init_crab
-time.sleep(round(random.uniform(0.5, 1.0), 10))
-print(init_crab)
-img = crab_location('loc.jpg')
-
-
-# img = torch.Tensor(img)
-
-
-# ----  tring thirdparty chinese_ocr app , but it fails ----
-# from thirdparty.chineseocr_app.crnn.network_torch import CRNN
-# from thirdparty.chineseocr_app.crnn.keys import alphabetChinese, alphabetEnglish
-# ocrModelWeight = os.path.join(pwd, "thirdparty","chineseocr_app", "models", "ocr-lstm.pth")
-# alphabet = alphabetChinese
-# nclass = len(alphabet)+1
-# LSTMFLAG = True
-# GPU = False
-# OCRMODEL = CRNN( 32, 1, nclass, 256, leakyRelu=False,lstmFlag=LSTMFLAG,GPU=GPU,alphabet=alphabet)
-# OCRMODEL.load_weights(ocrModelWeight)
-
-
-##
-
-#
-# class parmeters():
-#     def __init__(self):
-#         self.image_folder = 1
-#         self.workers = 2
-#         self.batch_size = 1
-#         self.saved_model = 'D://UAV_location//google_earth//GooleEarth//thirdparty' \
-#                            '//deep_tr//pretrained_models//TPS-ResNet-BiLSTM-Attn.pth'
-#         self.batch_max_length = 25
-#         self.imgH = 32
-#         self.imgW = 100
-#         self.rgb = False
-#         self.character = '0123456789abcdefghijklmnopqrstuvwxyz'
-#         self.sensitive = True
-#         self.PAD = True
-#         self.Transformation = 'TPS'
-#         self.FeatureExtraction = 'ResNet'
-#         self.SequenceModeling = 'BiLSTM'
-#         self.Prediction = 'Attn'
-#         self.num_fiducial = 20
-#         self.input_channel = 1
-#         self.output_channel = 512
-#         self.hidden_size = 256
-#
-#
-# opt = parmeters()
-# print(opt.FeatureExtraction)
-#
-# # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# device = torch.device('cpu')
-# converter = AttnLabelConverter(opt.character)
-# opt.num_class = len(converter.character)
-# if opt.rgb:
-#     opt.input_channel = 3
-# model = Model(opt).to(device)
-# print(
-#     'model input parameters',
-#     opt.imgH,
-#     opt.imgW,
-#     opt.num_fiducial,
-#     opt.input_channel,
-#     opt.output_channel,
-#     opt.hidden_size,
-#     opt.num_class,
-#     opt.batch_max_length,
-#     opt.Transformation,
-#     opt.FeatureExtraction,
-#     opt.SequenceModeling,
-#     opt.Prediction)
-#
-# # model = torch.nn.DataParallel(model).to(device)
-# # load model
-#
-#
-# print('loading pretrained model from %s' % opt.saved_model)
-# state_dict = torch.load(opt.saved_model)
-# new_state_dict = OrderedDict()
-# for k, v in state_dict.items():
-#     name = k[7:] # remove `module.`
-#     new_state_dict[name] = v
-# model.load_state_dict(new_state_dict)
-#
-# ###
-#
-# from thirdparty.deep_tr.dataset import ResizeNormalize
-# transform = ResizeNormalize((opt.imgW, opt.imgH))
-# image_tensor = transform(img).unsqueeze(0)
-# ###
-#
-# # with torchsnooper.snoop():
-# # image_tensor = img
-# print('..........',image_tensor.size())
-# image = image_tensor.to(device)
-# text_for_pred = torch.LongTensor(
-#     opt.batch_size,
-#     opt.batch_max_length +
-#     1).fill_(0).to(device)
-#
-#
-# preds = model(image, text_for_pred, is_train=False)
-# _, preds_index = preds.max(2)
-# length_for_pred = torch.IntTensor([opt.batch_max_length] * opt.batch_size).to(device)
-# preds_str = converter.decode(preds_index, length_for_pred)
-#
-# print(preds_str)
+    return init_crab, end_crab
 
 
 
-print(tesserocr.tesseract_version())  # print tesseract-ocr version
-# prints tessdata path and list of available languages
-print(tesserocr.get_languages())
 
-# with PyTessBaseAPI() as api:
-#     api.SetImageFile('loc.jpg')
-#     print(api.GetUTF8Text())
-#     print(api.AllWordConfidences())
 
-# print(tesserocr.file_to_text('loc.jpg', lang='Armenian', psm=7 ))
 def ocr(img):
 
     pytesseract.pytesseract.tesseract_cmd = r"F://Program Files (x86)//Tesseract-OCR//tesseract.exe"
-    a = pytesseract.image_to_string(
+    raw_string = pytesseract.image_to_string(
         img,
         lang='chi_sim',
         config='--tessdata-dir "F://Program Files (x86)//Tesseract-OCR//tessdata" digits')
-    print(a)
+    pattern = re.compile('[0-9]+')
+    coors = pattern.findall(raw_string)
+    print(coors)
+    return coors
 
 
-ocr(img)
-end = time.time()
-print(end - beg)
+
+def main():
+    beg = time.time()
+
+    # 截图
+    for i in range(10):
+        saved_imgfilename = 'test.jpg'
+        init_crab, end_crab = window_capture(saved_imgfilename)
+
+
+        img = crab_location('loc.jpg', mouse_pos=init_crab)
+        ocr(img)
+        img = crab_location('loc.jpg', mouse_pos=end_crab)
+        ocr(img)
+
+
+        move_scene()
+
+    end = time.time()
+    print(end - beg)
+
+
+main()
 
 # move_scene()
