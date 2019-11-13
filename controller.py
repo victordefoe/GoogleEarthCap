@@ -42,15 +42,32 @@ import matplotlib.pyplot as plt
 import re
 import pandas as pd
 
+import tesserocr
+from tesserocr import PyTessBaseAPI
+
+from utils import bondary, sexagesimal2decimal
+
 mouse = pynput.mouse.Controller()
 keyboard = pynput.keyboard.Controller()
 
 
 pwd = os.getcwd()
+temp_table = pd.DataFrame(
+    columns=[
+        'filename',
+        'init_coor_N',
+        'init_coor_E',
+        'end_coor_N',
+        'end_coor_E'])
+
+# 东西方速度，南北方向速度，正，则向东向北；数值控制移动跨步速度。
+# 初速度为 向北速度为1
+direction = {'EW': 0, 'NS': 1}
+eop = False
 
 
-def move_scene(motion='left'):
-    init_pos = (-1420, 500)
+def move_scene(direction):
+    init_pos = (-1420, 3)
     if mouse.position[0] >= 0:
         mouse.position = init_pos
         mouse.click(Button.left, 1)
@@ -62,13 +79,27 @@ def move_scene(motion='left'):
         'up': Key.up,
         'down': Key.down}
 
-    for i in range(1):
-        keyboard.press(act[motion])
-        time.sleep(0.05)
-        keyboard.release(act[motion])
+    if direction['EW'] != 0:
+        if direction['EW'] > 0:
+            keyboard.press(act['right'])
+            time.sleep(0.05 * abs(direction['EW']))
+            keyboard.release(act['right'])
+        elif direction['Ew'] < 0:
+            keyboard.press(act['left'])
+            time.sleep(0.05 * abs(direction['EW']))
+            keyboard.release(act['left'])
+
+    if direction['NS'] > 0:
+        keyboard.press(act['up'])
+        time.sleep(0.05 * abs(direction['NS']))
+        keyboard.release(act['up'])
+    elif direction['NS'] < 0:
+        keyboard.press(act['down'])
+        time.sleep(0.05 * abs(direction['NS']))
+        keyboard.release(act['down'])
 
 
-def crab_location(filename, mouse_pos ,high_stage=False):
+def crab_location(filename, mouse_pos, high_stage=False):
 
     mouse.position = mouse_pos
     # time.sleep(round(random.uniform(0.5, 1.0), 10))
@@ -87,7 +118,7 @@ def crab_location(filename, mouse_pos ,high_stage=False):
     saveDC.SelectObject(saveBitMap)
     saveDC.BitBlt((0, 0), (cap_w, cap_h), mfcDC,
                   start_pos, win32con.SRCCOPY)
-    saveBitMap.SaveBitmapFile(saveDC, filename)
+    # saveBitMap.SaveBitmapFile(saveDC, filename)
 
     bmparray = np.asarray(saveBitMap.GetBitmapBits(), dtype=np.uint8)
     bmpinfo = saveBitMap.GetInfo()
@@ -101,6 +132,7 @@ def crab_location(filename, mouse_pos ,high_stage=False):
         0,
         1).convert('L')
     pil_im = pil_im.point(lambda x: 255 if x > 240 else 0).convert('1')
+    pil_im.save(filename, quality=95)
     # pil_array = np.array(pil_im)
     # cv_im = cv2.cvtColor(pil_array, cv2.COLOR_RGB2BGR)
     # cv_im = cv2.cvtColor(cv_im, cv2.COLOR_BGR2GRAY)
@@ -146,9 +178,6 @@ def window_capture(filename, windowname='Google Earth Pro'):
     return init_crab, end_crab
 
 
-
-
-
 def ocr(img):
 
     pytesseract.pytesseract.tesseract_cmd = r"F://Program Files (x86)//Tesseract-OCR//tesseract.exe"
@@ -156,28 +185,105 @@ def ocr(img):
         img,
         lang='chi_sim',
         config='--tessdata-dir "F://Program Files (x86)//Tesseract-OCR//tessdata" digits')
-    pattern = re.compile('[0-9]+')
+
+    # raw_string = tesserocr.image_to_text(img, lang='chi_sim', psm=7)
+    print(raw_string)
+    pattern = re.compile(r'[0-9]+')
     coors = pattern.findall(raw_string)
-    print(coors)
-    return coors
+    coors = [float(x) for x in coors]
+    coors = [coors[0], coors[1], coors[2] + coors[3]*0.01, coors[4], coors[5], coors[6]+coors[7]*0.01]
+    notation = re.compile(r'[\u4e00-\u9fa5]+').findall(raw_string)
+    print(coors, notation)
+    sign_dict = {'西': -1, '东': 1, '南': -1, '北': 1}
+    sign = (sign_dict[notation[0]], sign_dict[notation[1]])
+
+    return coors, sign
+
+
+def check(img_filename, gt_file, coors1, coors1sign, coors2, coors2sign, saved_flag=False):
+    # 这个函数 一是合并转化ocr读取的信息成为标准的数值，二是根据这个数值获取下一步移动的指令
+    # 向北向东为正
+    assert len(coors1) == len(coors2) == 6, 'Error: OCR result error'
+
+    y_a, x_a = sexagesimal2decimal(
+        coors1[0:3]), sexagesimal2decimal(coors1[3:6])
+    y_a *= coors1sign[0]
+    x_a *= coors1sign[1]
+    y_b, x_b = sexagesimal2decimal(
+        coors2[0:3]), sexagesimal2decimal(coors2[3:6])
+    y_b *= coors2sign[0]
+    x_b *= coors2sign[1]
+    print('当前位置坐标', x_a, y_a)
+
+    # 写入缓变量 保存当前图像的 文件名和对应坐标位置
+    global temp_table
+    temp_table = temp_table.append({
+        'filename': img_filename,
+        'init_coor_N': y_a,
+        'init_coor_E': x_a,
+        'end_coor_N': y_b,
+        'end_coor_E': x_b}, ignore_index=True)
+
+    # 设定飞行规则：分析当前位置
+    # 撞南或者北墙，则向东移动一步并折返
+    if y_a > bondary.north:
+        direction['NS'] *= -1
+        direction['EW'] = 10
+    elif y_b < bondary.south:
+        direction['NS'] *= -1
+        direction['EW'] = 10
+    else:
+        direction['EW'] = 0
+
+    if x_b >= bondary.east:
+        eop = True
+
+    move_scene(direction)
+
+    if saved_flag:
+        temp_table.to_csv(gt_file, index=False, mode='a', header=False)
+        # clean the temp_variable
+        temp_table = pd.DataFrame(
+            columns=[
+                'filename',
+                'init_coor_N',
+                'init_coor_E',
+                'end_coor_N',
+                'end_coor_E'])
 
 
 
 def main():
     beg = time.time()
-
+    save_interval = 50  # Save the csv files for every # times ops
     # 截图
-    for i in range(10):
-        saved_imgfilename = 'test.jpg'
-        init_crab, end_crab = window_capture(saved_imgfilename)
+    for i in range(1000):
+        try:
+            saved_imgfilename = '%d.bmp' % i
+            saved_imgdir = r'Z:\research\datasets\GoogleEarth\collection_1\patch'
+            gt_file = os.path.join(saved_imgdir, 'gt.csv')
+            img_filepath = os.path.join(saved_imgdir, saved_imgfilename)
+            init_crab, end_crab = window_capture(img_filepath)
 
+            img = crab_location('loc.jpg', mouse_pos=init_crab)
+            initcoors, initsign = ocr(img)
+            img = crab_location('loc.jpg', mouse_pos=end_crab)
+            endcoors, endsign = ocr(img)
 
-        img = crab_location('loc.jpg', mouse_pos=init_crab)
-        ocr(img)
-        img = crab_location('loc.jpg', mouse_pos=end_crab)
-        ocr(img)
+            check(
+                saved_imgfilename,
+                gt_file,
+                initcoors,
+                initsign,
+                endcoors,
+                endsign,
+                i % save_interval == 0)
 
-        move_scene()
+            ## End of Program flag
+            if eop is True:
+                break
+        except Exception as e:
+            print(e)
 
     end = time.time()
     print(end - beg)
