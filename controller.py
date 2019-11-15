@@ -163,10 +163,10 @@ def window_capture(filename, windowname='Google Earth Pro'):
     print(hwnd)
     w = MoniterDev[0][2][2]
     h = MoniterDev[0][2][3]
-    init_crab = (-w + 500, 500)
+    init_crab = (-w + 500, 400)
 
     cap_w, cap_h = 500, 500
-    end_crab = (-w + 500 + cap_w, 500 + cap_h)
+    end_crab = (init_crab[0] + cap_w, init_crab[1] + cap_h)
     # print w,h　　　#图片大小
     # 为bitmap开辟空间
     saveBitMap.CreateCompatibleBitmap(mfcDC, cap_w, cap_h)
@@ -216,7 +216,7 @@ def check(img_filename, gt_file, coors1, coors1sign, coors2, coors2sign, saved_f
     print('当前位置坐标', x_a, y_a)
 
     # 写入缓变量 保存当前图像的 文件名和对应坐标位置
-    global temp_table
+    global temp_table, eop
     temp_table = temp_table.append({
         'filename': img_filename,
         'init_coor_N': y_a,
@@ -226,14 +226,9 @@ def check(img_filename, gt_file, coors1, coors1sign, coors2, coors2sign, saved_f
 
     # 设定飞行规则：分析当前位置
     # 撞南或者北墙，则向东移动一步并折返
-    if y_a > bondary.north:
+    if y_a > bondary.north or y_b < bondary.south:
         direction['NS'] *= -1
-        direction['EW'] = 10
-    elif y_b < bondary.south:
-        direction['NS'] *= -1
-        direction['EW'] = 10
-    else:
-        direction['EW'] = 0
+        move_scene({'NS': direction['NS'] * 3, 'EW': 10})  # 右下角回弹
 
     if x_b >= bondary.east:
         eop = True
@@ -257,7 +252,7 @@ def main():
     beg = time.time()
     save_interval = 50  # Save the csv files for every # times ops
     # 截图
-    for i in range(1000):
+    for i in range(10000):
         try:
             saved_imgfilename = '%d.bmp' % i
             saved_imgdir = r'Z:\research\datasets\GoogleEarth\collection_1\patch'
