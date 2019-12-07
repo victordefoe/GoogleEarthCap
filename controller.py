@@ -175,6 +175,12 @@ def window_capture(filename, windowname='Google Earth Pro'):
     # 截取从左上角（0，0）长宽为（w，h）的图片
     saveDC.BitBlt((0, 0), (cap_w, cap_h), mfcDC, init_crab, win32con.SRCCOPY)
     saveBitMap.SaveBitmapFile(saveDC, filename)
+
+
+    ## 内存释放--很重要
+    win32gui.DeleteObject(saveBitMap.GetHandle())
+    saveDC.DeleteDC()
+    mfcDC.DeleteDC()
     return init_crab, end_crab
 
 
@@ -258,7 +264,7 @@ def main():
             saved_imgdir = r'Z:\research\datasets\GoogleEarth\collection_1\patch'
             gt_file = os.path.join(saved_imgdir, 'gt.csv')
             img_filepath = os.path.join(saved_imgdir, saved_imgfilename)
-            init_crab, end_crab = window_capture(img_filepath)
+            init_crab, end_crab = window_capture(img_filepath)  ##
 
             img = crab_location('loc.jpg', mouse_pos=init_crab)
             initcoors, initsign = ocr(img)

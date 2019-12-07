@@ -16,6 +16,13 @@ import pandas as pd
 import os
 
 
+config_dict = {
+    'dataset_name': 'collection_1',
+    'datsset_path': r'Z:\research\datasets\GoogleEarth',
+
+}
+
+
 def decimal2sexagesimal(raw_num):
     """
     This is for transforming the data into sexagesimal and keep parts of digits
@@ -52,8 +59,8 @@ def sexagesimal2decimal(raw_num_list):
 def set_bond():
     Bondary = collections.namedtuple('Bondary', 'west, east, north, south')
     # bondary = Bondary(118.3247362807, 118.0864515186, 34.0708663191, 33.9221215026)
-    dataset_name = 'collection_1'
-    dataset_path = r'Z:\research\datasets\GoogleEarth'
+    dataset_name = config_dict['dataset_name']
+    dataset_path = config_dict['datsset_path']
     dataset = os.path.join(dataset_path, dataset_name)
     info = pd.read_csv(os.path.join(dataset, 'location.csv'), engine='python')
     info.drop(info.filter(regex='Unnamed'), axis=1, inplace=True)
@@ -71,9 +78,21 @@ def set_bond():
 bondary = set_bond()
 
 
+
+##
+
+
+# seperate the big pictures into small patchs for retrieval
+class AMap():
+    def __init__(self, ):
+        self.name = config_dict['datsset_name']
+
+
+
 if __name__ == '__main__':
 
-    print(decimal2sexagesimal(118.3247362807))
-    print(sexagesimal2decimal([41, 54, 10.28]))
-    # print(bondary.right)
-    set_bond()
+    print(decimal2sexagesimal(107.40563201904297))
+    print(decimal2sexagesimal(34.02503967285156))
+    # print(sexagesimal2decimal([41, 54, 10.28]))
+    print(bondary)
+    # set_bond()
