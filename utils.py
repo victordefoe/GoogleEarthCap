@@ -116,6 +116,8 @@ class AMap():
         self.dataset_root = dataset_conf['dataset_path']
         self.amap_file = os.path.join(
             self.dataset_root, self.name, 'all', self.level, 'all.tif')
+        self.gt_file = os.path.join(
+            self.dataset_root, self.name, 'patch', 'gt.csv')
 
         self.sep_output_path = os.path.join(
             self.dataset_root, self.name, 'seps', self.level)
@@ -133,41 +135,70 @@ class AMap():
         return set_bond(self.dataset_conf)
 
     def get_distance(self, lat1, lng1, lat2, lng2):
+        """
+        transfer to real distance
+        :param lat1: point 1 latitude
+        :param lng1: point 1 longitude
+        :param lat2: point 2 latitude
+        :param lng2: point 2 longitude
+        :return: distance in reality, unit is meter(M)
+        """
         EARTH_RADIUS = 6378.137
+        # need to transfer the latitude into 0~180 range (original one
+        # is -90~90 range) .
+        lat1,lat2 = 90 + lat1, 90+lat2
 
-        def rad(d):
+        def HaverSin(theta):
+            return math.pow(math.sin(theta/2), 2)
+
+
+        def rad(theta):
             """
-            Transfer the latitude and longitude distance to radius
-            :param d: distance
+            Transfer the latitude and longitude angle to radius
+            :param theta: angle (the numeral value of lat and lng)
             :return: radius
             """
-            return d * math.pi / 180.0
+            return theta * math.pi / 180.0
 
         radLat1 = rad(lat1)
         radLat2 = rad(lat2)
         a = radLat1 - radLat2
         b = rad(lng1) - rad(lng2)
 
-        s = 2 * math.asin(math.sqrt(math.pow(math.sin(a / 2), 2) +
-                                    math.cos(radLat1) * math.cos(radLat2) * math.pow(math.sin(b / 2), 2)))
+        s = 2 * math.asin(math.sqrt(HaverSin(a) +
+                                    math.cos(radLat1) * math.cos(radLat2) * HaverSin(b)))
+        # s = math.acos((math.cos(radLat1)*math.cos(radLat2)*math.cos(b) + math.sin(radLat1)*math.sin(radLat2)))
+
+
         s = s * EARTH_RADIUS
         s = (s * 10000) / 10
         return s
 
-    def sep(self, meter=None, sep_ratio=None):
+    def get_bond_dis(self):
         bonds = self.get_bonds()
+        # lng_diff = abs(bonds.west - bonds.east)
+        # lat_diff = abs(bonds.north - bonds.south)
+        lat_dis = self.get_distance(
+            bonds.west, bonds.north, bonds.east, bonds.north)
+        lng_dis = self.get_distance(
+            bonds.west, bonds.north, bonds.west, bonds.south)
+        return lat_dis, lng_dis
 
+
+    def sep(self, meter=None, sep_ratio=None):
+        """
+        Cutting all.tif picture into small pieces
+        :param meter: distance unit in meter
+        :param sep_ratio: or use ratio to seperate the picture
+        :return: output path
+        """
         if meter is not None:
             # using the meter to measure the interval
-            lng_diff = abs(bonds.west - bonds.east)
-            lat_diff = abs(bonds.north - bonds.south)
-            lat_dis = self.get_distance(
-                bonds.west, bonds.north, bonds.east, bonds.north)
-            lng_dis = self.get_distance(
-                bonds.west, bonds.north, bonds.west, bonds.south)
+
+            lat_dis, lng_dis = self.get_bond_dis()
             self.sep_ratio = (meter / lat_dis, meter / lng_dis)
             print(lat_dis, lng_dis)
-            print(bonds.west - nor)
+
 
         else:
             assert sep_ratio is not None, 'A ratio need to provide'
@@ -195,6 +226,8 @@ class AMap():
                     print('\r' + simgn, end='')
                     cv2.imwrite(
                         simgn, img[i * st[0]:(i + 1) * st[0], j * st[1]:(j + 1) * st[1], :])
+                    #TODO: generate the seperated piece images' annotation
+
 
 
 # def crop(img, fn):
@@ -222,4 +255,10 @@ if __name__ == '__main__':
     print(bondary)
     # set_bond()
     a = AMap()
-    a.sep(meter=None, sep_ratio=(0.005,0.005))
+
+    # print('维度, 经度： ', a.get_bond_dis())
+    # print(a.get_distance(34.023244,-118.260944,  34.023961,-118.260944))
+    # print(a.get_distance(34.023675, -118.260944, 34.023675, -118.261817))
+    # print(pd.read_csv(a.gt_file).head())
+
+    a.sep(meter=50, sep_ratio=None)
