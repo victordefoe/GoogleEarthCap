@@ -17,6 +17,7 @@ import os
 import math
 import cv2
 import json
+from tqdm import tqdm
 
 # default dataset configuration
 config_dict = {
@@ -128,7 +129,7 @@ class AMap():
         self.name = dataset_conf['dataset_name']
         self.dataset_root = dataset_conf['dataset_path']
         self.amap_file = os.path.join(
-            self.dataset_root, self.name, 'all', self.level, 'all.tif')
+            self.dataset_root, self.name, 'all', self.level, 'all_cut.tif')
         self.gt_file = os.path.join(
             self.dataset_root, self.name, 'patch', 'gt.csv')
 
@@ -267,25 +268,47 @@ class AMap():
         x = binary_image.shape[0]
         y = binary_image.shape[1]
         print(x, y)
-        edges_x_left, edges_x_right = [], []
-        edges_y_up, edges_y_down = [], []
-        for i in range(x):
-            if binary_image[i][0] == 255:
-                edges_x_left.append(i)
-            if binary_image[i][y] == 255:
-                edges_x_right.append(i)
-        for j in range(y):
-            if binary_image[0][j] == 255:
-                edges_y_up.append(j)
-            if binary_image[x][j] == 255:
-                edges_y_down.append(j)
 
-        left = max(min(edges_x_left), min(edges_x_right))  # 左边界
-        right = min(max(edges_x_left), max(edges_x_right))  # 右边界
-        width = right - left  # 宽度
-        bottom = max(min(edges_y_up), min(edges_y_down))  # 底部
-        top = min(max(edges_y_up), max(edges_y_down))  # 顶部
-        height = top - bottom  # 高度
+        # dst = cv2.cornerHarris(binary_image, 2, 3, 0.04)
+        # a = dst > 0.01 * dst.max()
+        # # b = pd.DataFrame(a)
+        #
+        # print(np.where(a==True)[0].shape)
+        # dst
+
+        # edges_x_left, edges_x_right = [], []
+        # edges_y_up, edges_y_down = [], []
+        # ## scan the center point
+        # def scan_x():
+        #     for j in range(y):
+        #         for i in range(x):
+        #             if binary_image[i][j] == 255:
+        #                 edges_x_left.append((i,j))
+        #             if binary_image[i][y-j-1] == 255:
+        #                 edges_x_right.append((i,j))
+        #             if len(edges_x_left) > 0 and len(edges_x_right) > 0:
+        #                 return
+        # def scan_y():
+        #     for i in range(x):
+        #         for j in range(y):
+        #             if binary_image[i][j] == 255:
+        #                 edges_y_up.append((i,j))
+        #             if binary_image[x-i-1][j] == 255:
+        #                 edges_y_down.append((i,j))
+        #             if len(edges_y_up) > 0 and len(edges_y_down) > 0:
+        #                 return
+        # scan_x()
+        # scan_y()
+        # edges_x_left = pd.DataFrame(edges_x_left, columns=['x','y'])
+        # edges_x_left.sort_values(by='x').loc[0].values
+        #
+        # left = max([min(edges_x_left), min(edges_x_right)])  # 左边界
+        # right = max([max(edges_x_left), max(edges_x_right)])  # 右边界
+        # print(edges_x_left, edges_x_right)
+        # width = right - left  # 宽度
+        # bottom = max([min(edges_y_up), min(edges_y_down)])  # 底部
+        # top = min([max(edges_y_up), max(edges_y_down)])  # 顶部
+        # height = top - bottom  # 高度
         pre_picture = img[left:left + width, bottom:bottom + height, :]
         print('Cut the black edge!! now the size is [width: %s AND height: %s] ' % (repr(width), repr(height)))
         if keep_the_preimg:
@@ -320,7 +343,8 @@ class AMap():
             print('Too big figure to handle, try to consider a second way')
         else:
             img = cv2.imread(self.amap_file)
-            img = self.drop_black_edge(img)  # prepare the true image
+            # img = self.drop_black_edge(img)  # prepare the true image
+            # img = self.crop4minima(img)
             st = (int(self.sep_ratio[0] * img.shape[0]),
                   int(self.sep_ratio[1] * img.shape[1]))
             sp = (int(img.shape[0] / st[0]), int(img.shape[1] / st[1]))
@@ -330,12 +354,12 @@ class AMap():
             self.glob_info['imgs_num'] = sp
             self.glob_info['original img_size'] = img.shape
 
-            for i in range(sp[0]):
-                for j in range(sp[1]):
+            for i in tqdm(range(sp[0])):
+                for j in range(sp[1 ]):
                     simgno = str(int(i * sp[1] + j + 1))
                     simgn = os.path.join(
                         self.sep_output_path, '0' * (10 - len(simgno)) + simgno + '.jpg')
-                    print('\r' + simgn, end='', flush=True)
+                    # print('\r' + simgn, end='', flush=True)
                     cv2.imwrite(
                         simgn, img[i * st[0]:(i + 1) * st[0], j * st[1]:(j + 1) * st[1], :])
                     # TODO: generate the seperated piece images' annotation
@@ -343,11 +367,78 @@ class AMap():
                     # extra information into a txt file
                     loc = self.__cal_sep_loc(img.shape, st, i, j)
                     loc_mark.loc[i*sp[1] + j] = {'imgfname': simgno, 'imgid': int(
-                        simgno), 'lat':self.bonds.south + loc[0], 'lng': self.bonds.west + loc[1]}
+                        simgno), 'lat':self.bonds.north - loc[0], 'lng': self.bonds.west + loc[1]}
             ## Write down the marks
             loc_mark.to_csv(os.path.join(self.sep_output_path, 'loc_mark.csv'), index=0)
             with open(os.path.join(self.sep_output_path, 'info.txt'), 'w') as f:
                 f.writelines(json.dumps(self.glob_info) + '\n')
+
+
+    def create_exact_mapping(self):
+        loc_mark = pd.DataFrame(columns=['imgfname', 'imgid', 'lat', 'lng'])
+        standard_locs = pd.DataFrame(columns=['lat', 'lng'])
+        standard = pd.read_csv(self.gt_file, header=None)
+        standard_locs['lat'] = 0.5 * (standard[1] + standard[3])
+        standard_locs['lng'] = 0.5 * (standard[2] + standard[4])
+
+        pos_x = 0.5 * (standard[1] + standard[3])
+        pos_y = 0.5 * (standard[2] + standard[4])
+
+
+        # find out the exact pixel point
+        lat_diff = abs(self.bonds.north - self.bonds.south)
+        lng_diff = abs(self.bonds.east - self.bonds.west)
+        standard_locs.lat = standard_locs.lat.apply(lambda x: abs(x - self.bonds.north)) / lat_diff
+        standard_locs.lng = standard_locs.lng.apply(lambda x: abs(x - self.bonds.west)) / lng_diff
+
+        print(standard_locs)
+
+        # get amap file
+        if get_file_size(self.amap_file, 'M') > 500:
+            print('Too big figure to handle, try to consider a second way')
+        else:
+            img = cv2.imread(self.amap_file)
+            print(img.shape)
+            height, width, _ = img.shape
+
+            pix_xs = standard_locs.lat * height
+            pix_ys = standard_locs.lng * width
+
+            pix_xs = pix_xs.apply(int)
+            pix_ys = pix_ys.apply(int)
+            print(pix_xs.describe())
+
+            loc_idx = 0
+            figure_size = (180,180)
+            for i in tqdm(range(len(pix_xs))):
+                sz1 = pix_xs.loc[i]
+                sz2 = pix_ys.loc[i]
+                a = int(sz1 - int(figure_size[0] / 2))  # x start
+                b = int(sz1 + int(figure_size[0] / 2))  # x end
+                c = int(sz2 - int(figure_size[1] / 2))  # y start
+                d = int(sz2 + int(figure_size[1] / 2))  # y end
+
+                try:
+                    assert a>0 and b<height and c>0 and d<width
+                    cropimg = img[a:b, c:d]
+
+                    simgno = str(int(i))
+                    simgn = os.path.join(
+                        self.sep_output_path, '0' * (10 - len(simgno)) + simgno + '.jpg')
+                    cv2.imwrite(simgn, cropimg)
+
+
+                    loc_idx += 1
+                    loc_mark.loc[loc_idx] = {'imgfname': simgno, 'imgid': int(
+                        simgno), 'lat': pos_x[i], 'lng': pos_y[i]}
+                except:
+                    print('imgnore: {}'.format(simgno))
+
+            loc_mark.to_csv(os.path.join(self.sep_output_path, 'loc_mark.csv'), index=0)
+            with open(os.path.join(self.sep_output_path, 'info.txt'), 'w') as f:
+                f.writelines(json.dumps(self.glob_info) + '\n')
+
+
 
 
 
@@ -358,11 +449,12 @@ if __name__ == '__main__':
     # print(sexagesimal2decimal([41, 54, 10.28]))
     print(bondary)
     # set_bond()
-    # a = AMap()
+    a = AMap()
     #
     # # print('维度, 经度： ', a.get_bond_dis())
     # # print(a.get_distance(34.023244,-118.260944,  34.023961,-118.260944))
     # # print(a.get_distance(34.023675, -118.260944, 34.023675, -118.261817))
     # # print(pd.read_csv(a.gt_file).head())
     #
-    # a.sep(meter=50, sep_ratio=None)
+    # a.sep(meter=200, sep_ratio=None)
+    a.create_exact_mapping()
