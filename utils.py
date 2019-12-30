@@ -14,14 +14,16 @@ import numpy as np
 import collections
 import pandas as pd
 import os
+from os.path import join as opj
 import math
 import cv2
 import json
 from tqdm import tqdm
+import shutil
 
 # default dataset configuration
 config_dict = {
-    'dataset_name': 'collection_1',
+    'dataset_name': 'collection_1_sp',
     'dataset_path': r'Z:\research\datasets\GoogleEarth',
     'dataset_level': ['18', '17', '16']
 
@@ -132,6 +134,9 @@ class AMap():
         self.level = '18'  # '16' | '17' | '18'
         self.name = dataset_conf['dataset_name']
         self.dataset_root = dataset_conf['dataset_path']
+        self.patch_dir = opj(self.dataset_root,self.name, 'patch')
+        if not os.path.exists(self.patch_dir):
+            os.makedirs(self.patch_dir)
         self.amap_file = os.path.join(
             self.dataset_root, self.name, 'all', self.level, 'all_cut.tif')
         self.gt_file = os.path.join(
@@ -153,7 +158,8 @@ class AMap():
         wrapper of returning bondaries func
         :return: set_bond
         """
-        return set_bond(self.dataset_conf)
+        bond, bond_se = set_bond(self.dataset_conf)
+        return bond
 
     def get_distance(self, lat1, lng1, lat2, lng2):
         """
@@ -443,6 +449,42 @@ class AMap():
                 f.writelines(json.dumps(self.glob_info) + '\n')
 
 
+    def make_sampler_from(self, path=None, skip_size=6):
+        assert type(skip_size)==int
+        if path is None:
+            path = self.patch_dir
+        print(' This function will repreduce the sampled figs into folder [sample]'
+              'if want to use it, manually replace it with original patch folder')
+        assert os.path.exists(self.patch_dir)
+        sample_folder = opj(self.dataset_root, self.name, 'sample_patch')
+        if not os.path.exists(sample_folder):
+            os.makedirs(sample_folder)
+        # string_namelist = [opj(sample_folder, img) for img in os.listdir(path) if os.path.splitext(img)[1] == '.bmp']
+        namelist = [int(img[:-4]) for img in os.listdir(path) if os.path.splitext(img)[1] == '.bmp']
+        namelist.sort()
+        new_namelist = [i for i in namelist if i%skip_size == 0]
+        selected = [opj(path, str(img)+'.bmp') for img in new_namelist]
+        # print(selected)
+        for each in tqdm(selected):
+            shutil.copy(each, sample_folder)
+
+        shutil.copy(opj(path, 'gt.csv') ,opj(sample_folder, 'raw_gt.csv'))
+
+
+    def make_sample_csv(self):
+        sample_folder = opj(self.dataset_root, self.name, 'sample_patch')
+        assert os.path.exists(sample_folder)
+
+        raw_gt_file = opj(sample_folder, 'raw_gt.csv')
+        namelist = [img for img in os.listdir(sample_folder) if os.path.splitext(img)[1] == '.bmp']
+        # print(len(namelist))
+        df = pd.read_csv(raw_gt_file, header=None)
+        sample_df = df[df[0].isin(namelist)].reset_index(drop=True)
+        sample_df.to_csv(opj(sample_folder, 'gt.csv'))
+
+
+
+
 
 
 
@@ -461,4 +503,10 @@ if __name__ == '__main__':
     # # print(pd.read_csv(a.gt_file).head())
     #
     # a.sep(meter=200, sep_ratio=None)
-    a.create_exact_mapping()
+    # a.create_exact_mapping()
+    # print()
+    # a.make_sampler_from(r'Z:\research\datasets\GoogleEarth\collection_2\patch', skip_size=4)
+    a.make_sample_csv()
+
+
+
