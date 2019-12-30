@@ -45,7 +45,7 @@ import pandas as pd
 import tesserocr
 from tesserocr import PyTessBaseAPI
 
-from utils import bondary, sexagesimal2decimal
+from utils import bondary, sexagesimal2decimal, bondary_se
 
 mouse = pynput.mouse.Controller()
 keyboard = pynput.keyboard.Controller()
@@ -98,6 +98,8 @@ def move_scene(direction):
         time.sleep(0.05 * abs(direction['NS']))
         keyboard.release(act['down'])
 
+    print(direction)
+
 
 def crab_location(filename, mouse_pos, high_stage=False):
 
@@ -141,6 +143,12 @@ def crab_location(filename, mouse_pos, high_stage=False):
     # # plt.show()
     # cv2.imwrite(filename, cv_th)
 
+    ## 内存释放--很重要
+    win32gui.DeleteObject(saveBitMap.GetHandle())
+    saveDC.DeleteDC()
+    mfcDC.DeleteDC()
+
+
     return pil_im
 
 
@@ -160,7 +168,7 @@ def window_capture(filename, windowname='Google Earth Pro'):
     # 获取监控器信息
     MoniterDev = win32api.EnumDisplayMonitors(None, None)
     # print(MoniterDev[1])
-    print(hwnd)
+    # print(hwnd)
     w = MoniterDev[0][2][2]
     h = MoniterDev[0][2][3]
     init_crab = (-w + 500, 400)
@@ -193,7 +201,7 @@ def ocr(img):
         config='--tessdata-dir "F://Program Files (x86)//Tesseract-OCR//tessdata" digits')
 
     # raw_string = tesserocr.image_to_text(img, lang='chi_sim', psm=7)
-    print(raw_string)
+    # print(raw_string)
     pattern = re.compile(r'[0-9]+')
     coors = pattern.findall(raw_string)
     coors = [float(x) for x in coors]
@@ -240,6 +248,8 @@ def check(img_filename, gt_file, coors1, coors1sign, coors2, coors2sign, saved_f
         eop = True
 
     move_scene(direction)
+    # print(bondary_se)
+
 
     if saved_flag:
         temp_table.to_csv(gt_file, index=False, mode='a', header=False)
@@ -258,10 +268,10 @@ def main():
     beg = time.time()
     save_interval = 50  # Save the csv files for every # times ops
     # 截图
-    for i in range(10000):
+    for i in range(850, 10000):
         try:
             saved_imgfilename = '%d.bmp' % i
-            saved_imgdir = r'Z:\research\datasets\GoogleEarth\collection_1\patch'
+            saved_imgdir = r'Z:\research\datasets\GoogleEarth\collection_2\patch'
             gt_file = os.path.join(saved_imgdir, 'gt.csv')
             img_filepath = os.path.join(saved_imgdir, saved_imgfilename)
             init_crab, end_crab = window_capture(img_filepath)  ##

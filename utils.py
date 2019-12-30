@@ -91,10 +91,14 @@ def set_bond(dataset_conf=config_dict):
     #     info.Latitude.max(),
     #     info.Latitude.min())
     bondary = Bondary(west, east, north, south)
-    return bondary
+    bondary_se = Bondary([decimal2sexagesimal(west)],
+                         [decimal2sexagesimal(east)],
+                         [decimal2sexagesimal(north)],
+                         [decimal2sexagesimal(south)])
+    return bondary, bondary_se
 
 
-bondary = set_bond()
+bondary, bondary_se = set_bond()
 
 
 ##
